@@ -14,30 +14,22 @@ import { Ionicons } from '@expo/vector-icons';
 const INTERFACES = [
   {
     id: 1,
-    title: 'Event Feed',
-    subtitle: 'TikTok-style discovery list',
-    icon: 'list' as const,
-    color: '#FF6B6B',
-    screen: 'EventFeed',
-  },
-  {
-    id: 2,
-    title: 'Event Map',
-    subtitle: 'Spatial event exploration',
+    title: 'Event Discovery',
+    subtitle: 'Map & feed views — explore nearby events',
     icon: 'map' as const,
     color: '#10B981',
     screen: 'EventMap',
   },
   {
-    id: 3,
-    title: 'Friend Availability',
-    subtitle: 'Social calendar & join plans',
+    id: 2,
+    title: 'Friend Events',
+    subtitle: 'Calendar & list views — join friend events',
     icon: 'people' as const,
     color: '#3B82F6',
     screen: 'FriendAvailability',
   },
   {
-    id: 4,
+    id: 3,
     title: 'Mood Tracker',
     subtitle: 'Daily journal for students',
     icon: 'happy' as const,
@@ -68,7 +60,7 @@ export default function HomeScreen() {
               <Ionicons name={item.icon} size={28} color={item.color} />
             </View>
             <View style={styles.cardText}>
-              <Text style={styles.cardNumber}>Interface {item.id}</Text>
+              <Text style={styles.cardNumber}>Interface {item.id} of 3</Text>
               <Text style={styles.cardTitle}>{item.title}</Text>
               <Text style={styles.cardSub}>{item.subtitle}</Text>
             </View>

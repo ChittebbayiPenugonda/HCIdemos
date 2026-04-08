@@ -11,6 +11,9 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
+import MoodHeatmapView from './MoodHeatmapView';
+
+type TopView = 'journal' | 'heatmap';
 
 type ActiveView = 'Daily' | 'Weekly' | 'Monthly';
 type MoodType = 'Happy' | 'Sad' | 'Stressed' | 'Angry' | 'Other';
@@ -34,13 +37,14 @@ const CHECK_INS: { id: TimeKey; label: string; time: string; icon: React.Compone
 
 const WEEK_DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
-const MOCK_WEEK: Record<string, [MoodType, MoodType, MoodType] | []> = {
-  Mon: ['Stressed', 'Happy',   'Happy'],
-  Tue: ['Happy',   'Sad',     'Stressed'],
-  Wed: ['Happy',   'Happy',   'Other'],
-  Thu: ['Stressed','Stressed','Angry'],
-  Fri: ['Happy',   'Happy',   'Happy'],
-  Sat: ['Happy',   'Other',   'Happy'],
+// Week of Apr 7–13. Tue morning is pre-logged; afternoon logged live during task.
+const MOCK_WEEK: Record<string, MoodType[]> = {
+  Mon: ['Stressed', 'Happy', 'Happy'],
+  Tue: ['Happy'],
+  Wed: [],
+  Thu: [],
+  Fri: [],
+  Sat: [],
   Sun: [],
 };
 
@@ -65,14 +69,17 @@ const emptyCheckIn = (): CheckInState => ({ moods: [], note: '', activities: [] 
 
 // ─── Sub-views ───────────────────────────────────────────────────────────────
 
-function DailyView() {
-  const [expanded, setExpanded] = useState<TimeKey>('morning');
+function DailyView({ onViewWeekly }: { onViewWeekly: () => void }) {
+  // Default to Afternoon open — task scenario is Tuesday afternoon
+  const [expanded, setExpanded] = useState<TimeKey>('afternoon');
   const [data, setData] = useState<Record<TimeKey, CheckInState>>({
-    morning: emptyCheckIn(),
+    // Pre-seed morning so weekly grid looks lived-in
+    morning: { moods: ['Happy'], activities: ['Meal', 'Class'], note: 'Good start, felt energized for morning lecture.' },
     afternoon: emptyCheckIn(),
     evening: emptyCheckIn(),
   });
-  const [saved, setSaved] = useState<TimeKey[]>([]);
+  const [saved, setSaved] = useState<TimeKey[]>(['morning']);
+  const [lastSaved, setLastSaved] = useState<TimeKey | null>(null);
 
   const toggleMood = (key: TimeKey, mood: MoodType) => {
     setData((p) => {
@@ -106,11 +113,12 @@ function DailyView() {
 
   const handleSave = (key: TimeKey) => {
     setSaved((p) => (p.includes(key) ? p : [...p, key]));
+    setLastSaved(key);
   };
 
   return (
     <>
-      <Text style={ds.dateHeader}>Tuesday, March 16</Text>
+      <Text style={ds.dateHeader}>Tuesday, April 8</Text>
       {CHECK_INS.map((ci) => {
         const open = expanded === ci.id;
         const d = data[ci.id];
@@ -209,9 +217,27 @@ function DailyView() {
                   </View>
                 </ScrollView>
 
-                <TouchableOpacity style={ds.saveBtn} onPress={() => handleSave(ci.id)}>
-                  <Text style={ds.saveBtnTxt}>Save {ci.label} Check-in</Text>
-                </TouchableOpacity>
+                {isSaved ? (
+                  <View style={ds.savedConfirmBox}>
+                    <View style={ds.savedConfirmLeft}>
+                      <Ionicons name="checkmark-circle" size={20} color="#22C55E" />
+                      <View>
+                        <Text style={ds.savedConfirmTitle}>Check-in saved!</Text>
+                        <Text style={ds.savedConfirmSub}>
+                          {d.moods.join(', ') || 'Logged'} · {d.activities.slice(0, 2).join(', ') || 'No activities'}
+                        </Text>
+                      </View>
+                    </View>
+                    <TouchableOpacity style={ds.weekLinkBtn} onPress={onViewWeekly}>
+                      <Text style={ds.weekLinkTxt}>See week →</Text>
+                    </TouchableOpacity>
+                  </View>
+                ) : (
+                  <TouchableOpacity style={ds.saveBtn} onPress={() => handleSave(ci.id)}>
+                    <Ionicons name="save-outline" size={17} color="#fff" />
+                    <Text style={ds.saveBtnTxt}>Save {ci.label} Check-in</Text>
+                  </TouchableOpacity>
+                )}
               </View>
             )}
           </View>
@@ -221,24 +247,33 @@ function DailyView() {
   );
 }
 
-function WeeklyView() {
+function WeeklyView({ tueSavedMoods }: { tueSavedMoods: MoodType[] }) {
   const [highs, setHighs] = useState('');
   const [lows, setLows] = useState('');
   const [goals, setGoals] = useState('');
+  const [weeklySaved, setWeeklySaved] = useState(false);
+
+  // Merge live-saved Tuesday moods into the grid
+  const liveWeek: Record<string, MoodType[]> = {
+    ...MOCK_WEEK,
+    Tue: tueSavedMoods.length > 0 ? tueSavedMoods.slice(0, 3) : MOCK_WEEK['Tue'],
+  };
 
   return (
     <>
-      <Text style={ds.dateHeader}>Week of March 10 – 16</Text>
+      <Text style={ds.dateHeader}>Week of Apr 7 – 13</Text>
 
       {/* Day grid */}
       <View style={ds.section}>
         <Text style={ds.sectionTitle2}>Daily Moods</Text>
         <View style={ds.weekGrid}>
           {WEEK_DAYS.map((d) => {
-            const moods = MOCK_WEEK[d] as MoodType[] | [];
+            const moods = liveWeek[d] as MoodType[] | [];
+            const isToday = d === 'Tue';
             return (
-              <View key={d} style={ds.weekCol}>
-                <Text style={ds.weekDayLabel}>{d}</Text>
+              <View key={d} style={[ds.weekCol, isToday && ds.weekColToday]}>
+                <Text style={[ds.weekDayLabel, isToday && { color: PURPLE }]}>{d}</Text>
+                {isToday && <Text style={ds.weekTodayLabel}>today</Text>}
                 {moods.length > 0 ? (
                   (moods as MoodType[]).map((m, i) => (
                     <View key={i} style={[ds.moodDotLg, { backgroundColor: moodColor(m) }]} />
@@ -297,9 +332,17 @@ function WeeklyView() {
           numberOfLines={3}
         />
 
-        <TouchableOpacity style={ds.saveBtn}>
-          <Text style={ds.saveBtnTxt}>Save Weekly Review</Text>
-        </TouchableOpacity>
+        {weeklySaved ? (
+          <View style={ds.savedConfirmBox}>
+            <Ionicons name="checkmark-circle" size={20} color="#22C55E" />
+            <Text style={ds.savedConfirmTitle}>Weekly review saved!</Text>
+          </View>
+        ) : (
+          <TouchableOpacity style={ds.saveBtn} onPress={() => setWeeklySaved(true)}>
+            <Ionicons name="save-outline" size={17} color="#fff" />
+            <Text style={ds.saveBtnTxt}>Save Weekly Review</Text>
+          </TouchableOpacity>
+        )}
       </View>
     </>
   );
@@ -375,7 +418,10 @@ function MonthlyView() {
 
 export default function MoodTrackerScreen() {
   const navigation = useNavigation();
+  const [topView, setTopView] = useState<TopView>('journal');
   const [view, setView] = useState<ActiveView>('Daily');
+  // Lift Tuesday afternoon moods up so WeeklyView can reflect live saves
+  const [tueSavedMoods, setTueSavedMoods] = useState<MoodType[]>(['Happy']); // morning pre-seeded
 
   return (
     <SafeAreaView style={ds.container}>
@@ -386,35 +432,63 @@ export default function MoodTrackerScreen() {
         <TouchableOpacity style={ds.backBtn} onPress={() => navigation.goBack()}>
           <Ionicons name="chevron-back" size={24} color="#5B4F7C" />
         </TouchableOpacity>
-        <Text style={ds.headerTitle}>Mood Journal</Text>
+        <Text style={ds.headerTitle}>Mood Tracker</Text>
         <TouchableOpacity style={ds.iconBtn}>
           <Ionicons name="settings-outline" size={22} color="#5B4F7C" />
         </TouchableOpacity>
       </View>
 
-      {/* Segmented tabs */}
-      <View style={ds.tabBar}>
-        {(['Daily', 'Weekly', 'Monthly'] as ActiveView[]).map((v) => (
+      {/* Top-level toggle: Journal | Heatmap */}
+      <View style={ds.topToggleWrap}>
+        <View style={ds.topToggle}>
           <TouchableOpacity
-            key={v}
-            style={[ds.tabItem, view === v && ds.tabItemActive]}
-            onPress={() => setView(v)}
+            style={[ds.topToggleBtn, topView === 'journal' && ds.topToggleBtnActive]}
+            onPress={() => setTopView('journal')}
           >
-            <Text style={[ds.tabItemTxt, view === v && ds.tabItemTxtActive]}>{v}</Text>
+            <Ionicons name="journal-outline" size={15} color={topView === 'journal' ? '#3D3260' : '#A99CC0'} />
+            <Text style={[ds.topToggleTxt, topView === 'journal' && ds.topToggleTxtActive]}>Journal</Text>
           </TouchableOpacity>
-        ))}
+          <TouchableOpacity
+            style={[ds.topToggleBtn, topView === 'heatmap' && ds.topToggleBtnActive]}
+            onPress={() => setTopView('heatmap')}
+          >
+            <Ionicons name="grid-outline" size={15} color={topView === 'heatmap' ? '#3D3260' : '#A99CC0'} />
+            <Text style={[ds.topToggleTxt, topView === 'heatmap' && ds.topToggleTxtActive]}>Heatmap</Text>
+          </TouchableOpacity>
+        </View>
       </View>
 
-      <ScrollView
-        style={{ flex: 1 }}
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={ds.scroll}
-      >
-        {view === 'Daily'   && <DailyView />}
-        {view === 'Weekly'  && <WeeklyView />}
-        {view === 'Monthly' && <MonthlyView />}
-        <View style={{ height: 32 }} />
-      </ScrollView>
+      {topView === 'heatmap' ? (
+        <MoodHeatmapView />
+      ) : (
+        <>
+          {/* Journal sub-tabs */}
+          <View style={ds.tabBar}>
+            {(['Daily', 'Weekly', 'Monthly'] as ActiveView[]).map((v) => (
+              <TouchableOpacity
+                key={v}
+                style={[ds.tabItem, view === v && ds.tabItemActive]}
+                onPress={() => setView(v)}
+              >
+                <Text style={[ds.tabItemTxt, view === v && ds.tabItemTxtActive]}>{v}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+
+          <ScrollView
+            style={{ flex: 1 }}
+            showsVerticalScrollIndicator={false}
+            contentContainerStyle={ds.scroll}
+          >
+            {view === 'Daily'   && (
+              <DailyView onViewWeekly={() => setView('Weekly')} />
+            )}
+            {view === 'Weekly'  && <WeeklyView tueSavedMoods={tueSavedMoods} />}
+            {view === 'Monthly' && <MonthlyView />}
+            <View style={{ height: 32 }} />
+          </ScrollView>
+        </>
+      )}
     </SafeAreaView>
   );
 }
@@ -427,6 +501,33 @@ const LILAC    = '#F3F0FA';
 
 const ds = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#FAFAFA' },
+
+  topToggleWrap: { paddingHorizontal: 16, paddingBottom: 8 },
+  topToggle: {
+    flexDirection: 'row',
+    backgroundColor: '#E8E4F3',
+    borderRadius: 14,
+    padding: 4,
+  },
+  topToggleBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 10,
+    borderRadius: 11,
+  },
+  topToggleBtnActive: {
+    backgroundColor: '#fff',
+    shadowColor: '#7C6FA0',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.12,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  topToggleTxt: { fontSize: 14, fontWeight: '600', color: '#A99CC0' },
+  topToggleTxtActive: { color: '#3D3260', fontWeight: '700' },
 
   header: {
     flexDirection: 'row',
@@ -510,6 +611,43 @@ const ds = StyleSheet.create({
   moodDot: { width: 8, height: 8, borderRadius: 4 },
   savedBadge: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   savedTxt: { fontSize: 11, color: '#22C55E', fontWeight: '600' },
+
+  savedConfirmBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#ECFDF5',
+    borderRadius: 12,
+    padding: 12,
+    marginTop: 14,
+    borderWidth: 1.5,
+    borderColor: '#A7F3D0',
+    gap: 10,
+  },
+  savedConfirmLeft: { flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1 },
+  savedConfirmTitle: { fontSize: 13, fontWeight: '700', color: '#065F46' },
+  savedConfirmSub: { fontSize: 11, color: '#6EE7B7', marginTop: 1 },
+  weekLinkBtn: {
+    backgroundColor: PURPLE,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 10,
+  },
+  weekLinkTxt: { color: '#fff', fontWeight: '700', fontSize: 12 },
+
+  weekColToday: {
+    backgroundColor: '#EDE9FA',
+    borderRadius: 10,
+    paddingHorizontal: 4,
+    paddingVertical: 4,
+  },
+  weekTodayLabel: {
+    fontSize: 8,
+    fontWeight: '700',
+    color: PURPLE,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
 
   sectionBody: { paddingHorizontal: 16, paddingBottom: 16 },
 
